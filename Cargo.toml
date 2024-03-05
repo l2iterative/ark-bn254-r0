@@ -5,9 +5,11 @@ license = "MIT/Apache-2.0"
 edition = "2021"
 
 [dependencies]
-ark-ff = { version= "0.4.0", default-features = false }
-ark-ec = { version= "0.4.0", default-features = false }
-ark-std = { version = "0.4.0", default-features = false }
+ark-ff = { git = "https://github.com/arkworks-rs/algebra", default-features = false }
+ark-ec = { git = "https://github.com/arkworks-rs/algebra", default-features = false }
+ark-std = { git = "https://github.com/arkworks-rs/std", default-features = false }
+ark-serialize = { git = "https://github.com/arkworks-rs/algebra", default-features = false }
+zeroize = { version = "1", default-features = false, features = ["zeroize_derive"] }
 
 [features]
 default = [ "curve" ]
