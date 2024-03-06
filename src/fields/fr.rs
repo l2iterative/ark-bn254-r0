@@ -1,7 +1,7 @@
-use ark_ff::AdditiveGroup;
 use ark_ff::BigInt;
+use ark_ff::{AdditiveGroup, Field, SqrtPrecomputation};
 use ark_serialize::{
-    CanonicalDeserialize, CanonicalDeserializeWithFlags, CanonicalSerialize,
+    buffer_byte_size, CanonicalDeserialize, CanonicalDeserializeWithFlags, CanonicalSerialize,
     CanonicalSerializeWithFlags, Compress, EmptyFlags, Flags, SerializationError, Valid, Validate,
 };
 use ark_serialize::{Read, Write};
@@ -11,7 +11,7 @@ use ark_std::rand::Rng;
 use ark_std::{One, Zero};
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
-use std::ops::{AddAssign, MulAssign, Neg, Sub, SubAssign};
+use std::ops::{AddAssign, DivAssign, MulAssign, Neg, Sub, SubAssign};
 use zeroize::Zeroize;
 
 pub(crate) const BIGINT_WIDTH_WORDS: usize = 8;
@@ -354,7 +354,9 @@ impl CanonicalSerializeWithFlags for Fr {
             return Err(SerializationError::NotEnoughSpace);
         }
 
-        let bytes = [
+        let output_byte_size = buffer_byte_size(254 + F::BIT_SIZE);
+
+        let mut bytes = [
             (self.data[0] & 0xff) as u8,
             ((self.data[0] >> 8) & 0xff) as u8,
             ((self.data[0] >> 16) & 0xff) as u8,
@@ -371,14 +373,38 @@ impl CanonicalSerializeWithFlags for Fr {
             ((self.data[3] >> 8) & 0xff) as u8,
             ((self.data[3] >> 16) & 0xff) as u8,
             ((self.data[3] >> 24) & 0xff) as u8,
-            flags.u8_bitmask(),
+            (self.data[4] & 0xff) as u8,
+            ((self.data[4] >> 8) & 0xff) as u8,
+            ((self.data[4] >> 16) & 0xff) as u8,
+            ((self.data[4] >> 24) & 0xff) as u8,
+            (self.data[5] & 0xff) as u8,
+            ((self.data[5] >> 8) & 0xff) as u8,
+            ((self.data[5] >> 16) & 0xff) as u8,
+            ((self.data[5] >> 24) & 0xff) as u8,
+            (self.data[6] & 0xff) as u8,
+            ((self.data[6] >> 8) & 0xff) as u8,
+            ((self.data[6] >> 16) & 0xff) as u8,
+            ((self.data[6] >> 24) & 0xff) as u8,
+            (self.data[7] & 0xff) as u8,
+            ((self.data[7] >> 8) & 0xff) as u8,
+            ((self.data[7] >> 16) & 0xff) as u8,
+            ((self.data[7] >> 24) & 0xff) as u8,
+            0u8,
         ];
-        writer.write_all(&bytes)?;
+
+        if output_byte_size == 32 {
+            bytes[31] |= flags.u8_bitmask();
+            writer.write_all(&bytes[0..32])?;
+        } else {
+            bytes[32] = flags.u8_bitmask();
+            writer.write_all(&bytes)?;
+        }
+
         Ok(())
     }
 
     fn serialized_size_with_flags<F: Flags>(&self) -> usize {
-        33
+        buffer_byte_size(254 + F::BIT_SIZE)
     }
 }
 
@@ -406,15 +432,29 @@ impl CanonicalDeserializeWithFlags for Fr {
             return Err(SerializationError::NotEnoughSpace);
         }
 
+        let output_byte_size = buffer_byte_size(254 + F::BIT_SIZE);
+
         let mut all_bytes = MaybeUninit::<[u8; 33]>::uninit();
-        unsafe {
-            reader.read_exact(&mut *(all_bytes.as_mut_ptr()))?;
+
+        if output_byte_size == 32 {
+            unsafe {
+                reader.read_exact(&mut *(all_bytes.as_mut_ptr())[0..32])?;
+            }
+        } else {
+            unsafe {
+                reader.read_exact(&mut *(all_bytes.as_mut_ptr()))?;
+            }
         }
 
         let mut all_bytes = unsafe { all_bytes.assume_init() };
 
-        let flags = F::from_u8_remove_flags(&mut all_bytes[32])
-            .ok_or(SerializationError::UnexpectedFlags)?;
+        let flags = if output_byte_size == 32 {
+            F::from_u8_remove_flags(&mut all_bytes[31])
+                .ok_or(SerializationError::UnexpectedFlags)?
+        } else {
+            F::from_u8_remove_flags(&mut all_bytes[32])
+                .ok_or(SerializationError::UnexpectedFlags)?
+        };
 
         let res = Self {
             data: [
@@ -464,7 +504,7 @@ impl Valid for Fr {
 }
 
 impl CanonicalDeserialize for Fr {
-    fn deserialize_with_mode<R: ark_serialize::Read>(
+    fn deserialize_with_mode<R: Read>(
         reader: R,
         _compress: Compress,
         _validate: Validate,
@@ -662,6 +702,109 @@ impl AdditiveGroup for Fr {
             );
         }
         self
+    }
+}
+
+impl<'a> DivAssign<&'a Self> for Fr {
+    fn div_assign(&mut self, rhs: &'a Self) {
+        todo!()
+    }
+}
+
+impl Field for Fr {
+    type BasePrimeField = Self;
+    type BasePrimeFieldIter = core::iter::Once<Self::BasePrimeField>;
+
+    const SQRT_PRECOMP: Option<SqrtPrecomputation<Self>> =
+        Some(SqrtPrecomputation::TonelliShanks {
+            two_adicity: 28,
+            quadratic_nonresidue_to_trace: Fr {
+                data: [
+                    0x725b19f0u32,
+                    0x9bd61b6eu32,
+                    0x41112ed4u32,
+                    0x402d111eu32,
+                    0x8ef62abcu32,
+                    0x00e0a7ebu32,
+                    0xa58a7e85u32,
+                    0x2a3c09f0u32,
+                ],
+            },
+            trace_of_modulus_minus_one_div_two: &[
+                0xcdcb848a1f0fac9f,
+                0x0c0ac2e9419f4243,
+                0x098d014dc2822db4,
+                0x183227397,
+            ],
+        });
+
+    const ONE: Self = Self::one();
+
+    fn extension_degree() -> u64 {
+        1
+    }
+
+    fn from_base_prime_field(elem: Self::BasePrimeField) -> Self {
+        elem
+    }
+
+    fn to_base_prime_field_elements(&self) -> Self::BasePrimeFieldIter {
+        core::iter::once(*self)
+    }
+
+    #[inline]
+    fn from_base_prime_field_elems(
+        elems: impl IntoIterator<Item = Self::BasePrimeField>,
+    ) -> Option<Self> {
+        let mut elems = elems.into_iter();
+        let elem = elems.next()?;
+        if elems.next().is_some() {
+            return None;
+        }
+        Some(elem)
+    }
+
+    #[inline]
+    fn characteristic() -> &'static [u64] {
+        &[
+            0x43e1f593f0000001u64,
+            0x2833e84879b97091u64,
+            0xb85045b68181585du64,
+            0x30644e72e131a029u64,
+        ]
+    }
+
+    #[inline]
+    fn from_random_bytes_with_flags<F: Flags>(bytes: &[u8]) -> Option<(Self, F)> {
+        if F::BIT_SIZE > 8 {
+            return None;
+        }
+
+        let output_byte_size = buffer_byte_size(254 + F::BIT_SIZE);
+
+        if output_byte_size == 32 {
+            let mut all_bytes = MaybeUninit::<[u8; 32]>::uninit();
+            all_bytes.as_mut_ptr().copy_from_slice(bytes);
+            let mut all_bytes = unsafe { all_bytes.assume_init() };
+
+            let flags = F::from_u8_remove_flags(&mut all_bytes[31])
+                .ok_or(SerializationError::UnexpectedFlags)?;
+
+            Self::deserialize_compressed(&all_bytes[0..32])
+                .ok()
+                .and_then(|f| Some((f, flags)))
+        } else {
+            let mut all_bytes = MaybeUninit::<[u8; 33]>::uninit();
+            all_bytes.as_mut_ptr().copy_from_slice(bytes);
+            let mut all_bytes = unsafe { all_bytes.assume_init() };
+
+            let flags = F::from_u8_remove_flags(&mut all_bytes[32])
+                .ok_or(SerializationError::UnexpectedFlags)?;
+
+            Self::deserialize_compressed(&all_bytes[0..32])
+                .ok()
+                .and_then(|f| Some((f, flags)))
+        }
     }
 }
 
