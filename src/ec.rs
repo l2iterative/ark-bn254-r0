@@ -20,9 +20,9 @@ pub trait GLVConfigWithFastAffine: SWCurveConfig + GLVConfig {
 
         let b1b2 = (b1 + &b2).into_affine();
 
-        let b1 = (b1.x().unwrap(), b1.y().unwrap());
-        let b2 = (b2.x().unwrap(), b2.y().unwrap());
-        let b1b2 = (b1b2.x().unwrap(), b1b2.y().unwrap());
+        let b1 = (-b1.x().unwrap(), -b1.y().unwrap());
+        let b2 = (-b2.x().unwrap(), -b2.y().unwrap());
+        let b1b2 = (-b1b2.x().unwrap(), -b1b2.y().unwrap());
 
         let iter_k1 = ark_ff::BitIteratorBE::new(k1.into_bigint());
         let iter_k2 = ark_ff::BitIteratorBE::new(k2.into_bigint());
@@ -65,13 +65,15 @@ pub trait GLVConfigWithFastAffine: SWCurveConfig + GLVConfig {
                 let x2 = &point_to_add.0;
                 let y2 = &point_to_add.1;
 
-                let s: Self::BaseField = (y1 - y2) * (x1 - x2).inverse().unwrap();
-                let x3 = s.square() - x1 - x2;
+                let s: Self::BaseField = (y1 + y2) * (x1 + x2).inverse().unwrap();
+                let x3 = s.square() - x1 + x2;
                 let y3 = s * (x1 - x3) - y1;
 
                 res = Some((x3, y3));
             } else {
-                res = Some(*point_to_add);
+                let x = &point_to_add.0;
+                let y = &point_to_add.1;
+                res = Some((-x, -y));
             }
         }
 
