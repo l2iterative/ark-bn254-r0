@@ -81,6 +81,21 @@ pub struct Fp<P: FpConfig> {
 }
 
 impl<P: FpConfig> Fp<P> {
+    pub const ONE: Self = Self {
+        data: ONE,
+        phantom: PhantomData,
+    };
+
+    pub const ZERO: Self = Self {
+        data: [0u32; 8],
+        phantom: PhantomData,
+    };
+
+    pub const MINUS_ONE: Self = Self {
+        data: P::MODULUS_MINUS_ONE,
+        phantom: PhantomData,
+    };
+
     pub fn reduce(&self) -> [u32; 8] {
         let mut res = MaybeUninit::<[u32; 8]>::uninit();
         unsafe {
@@ -105,6 +120,62 @@ impl<P: FpConfig> Fp<P> {
         }
         return true;
     }
+
+    #[inline]
+    pub const fn from_sign_and_limbs(is_positive: bool, limbs: &[u64]) -> Self {
+        let len = limbs.len();
+        let mut buffer = [0u32; 8];
+
+        if len >= 1 {
+            buffer[0] = (limbs[0] & 0xffffffff) as u32;
+            buffer[1] = ((limbs[0] >> 32) & 0xffffffff) as u32;
+        }
+
+        if len >= 2 {
+            buffer[2] = (limbs[1] & 0xffffffff) as u32;
+            buffer[3] = ((limbs[1] >> 32) & 0xffffffff) as u32;
+        }
+
+        if len >= 3 {
+            buffer[4] = (limbs[2] & 0xffffffff) as u32;
+            buffer[5] = ((limbs[2] >> 32) & 0xffffffff) as u32;
+        }
+
+        if len == 4 {
+            buffer[6] = (limbs[3] & 0xffffffff) as u32;
+            buffer[7] = ((limbs[3] >> 32) & 0xffffffff) as u32;
+        }
+
+        let res = Self {
+            data: buffer,
+            phantom: PhantomData,
+        };
+        if is_positive {
+            res
+        } else {
+            res.const_neg()
+        }
+    }
+
+    #[inline]
+    pub const fn const_neg(self) -> Self {
+        let (res, _) = sub_and_borrow(&P::MODULUS, &self.data);
+        Self {
+            data: res,
+            phantom: PhantomData,
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! const_for {
+    (($i:ident in $start:tt..$end:tt)  $code:expr ) => {{
+        let mut $i = $start;
+        while $i < $end {
+            $code
+            $i += 1;
+        }
+    }};
 }
 
 impl<P: FpConfig> ark_std::fmt::Debug for Fp<P> {
@@ -933,6 +1004,73 @@ impl<P: FpConfig> Field for Fp<P> {
         };
     }
 
+    #[must_use]
+    fn sqrt(&self) -> Option<Self> {
+        if self.is_zero() {
+            return Some(Self::ZERO);
+        }
+
+        let mut res = MaybeUninit::<[u32; 8]>::uninit();
+
+        let a0 = unsafe {
+            sys_untrusted_mod_sqrt(
+                res.as_mut_ptr() as *mut u32,
+                &self.data,
+                &P::MODULUS,
+                &P::GENERATOR,
+            )
+        };
+
+        let res = unsafe { res.assume_init() };
+
+        return if a0 == 0 {
+            let mut res_squared = MaybeUninit::<[u32; 8]>::uninit();
+            unsafe {
+                sys_bigint(
+                    res_squared.as_mut_ptr(),
+                    OP_MULTIPLY,
+                    &res,
+                    &res,
+                    &P::MODULUS,
+                );
+            }
+            let res_squared = unsafe { res_squared.assume_init() };
+            assert_eq!(res_squared, self.reduce());
+
+            Some(Self {
+                data: res,
+                phantom: PhantomData,
+            })
+        } else {
+            let mut res_squared = MaybeUninit::<[u32; 8]>::uninit();
+            unsafe {
+                sys_bigint(
+                    res_squared.as_mut_ptr(),
+                    OP_MULTIPLY,
+                    &res,
+                    &res,
+                    &P::MODULUS,
+                );
+            }
+            let res_squared = unsafe { res_squared.assume_init() };
+
+            let mut res_mul = MaybeUninit::<[u32; 8]>::uninit();
+            unsafe {
+                sys_bigint(
+                    res_mul.as_mut_ptr(),
+                    OP_MULTIPLY,
+                    &self.data,
+                    &P::GENERATOR,
+                    &P::MODULUS,
+                );
+            }
+            let res_mul = unsafe { res_mul.assume_init() };
+            assert_eq!(res_squared, res_mul);
+
+            None
+        };
+    }
+
     #[inline]
     fn square(&self) -> Self {
         self.mul(self)
@@ -1135,4 +1273,36 @@ pub fn add<const I: usize, const J: usize>(accm: &mut [u32; I], new: &[u32; J]) 
         (carry, accm[i]) = carry32_and_overflow(accm[i], carry);
     }
     carry
+}
+
+#[inline]
+pub const fn sub_with_borrow(a: u32, b: u32, carry: u32) -> (u32, u32) {
+    let res = ((a as u64).wrapping_add(0x100000000))
+        .wrapping_sub(b as u64)
+        .wrapping_sub(carry as u64);
+    (
+        (res & 0xffffffff) as u32,
+        1u32.wrapping_sub((res >> 32) as u32),
+    )
+}
+
+#[inline]
+pub const fn sub_and_borrow(accu: &[u32; 8], new: &[u32; 8]) -> ([u32; 8], u32) {
+    let mut accu = [
+        accu[0], accu[1], accu[2], accu[3], accu[4], accu[5], accu[6], accu[7],
+    ];
+
+    let (cur, borrow) = accu[0].overflowing_sub(new[0]);
+    accu[0] = cur;
+
+    let mut borrow = borrow as u32;
+    (accu[1], borrow) = sub_with_borrow(accu[1], new[1], borrow);
+    (accu[2], borrow) = sub_with_borrow(accu[2], new[2], borrow);
+    (accu[3], borrow) = sub_with_borrow(accu[3], new[3], borrow);
+    (accu[4], borrow) = sub_with_borrow(accu[4], new[4], borrow);
+    (accu[5], borrow) = sub_with_borrow(accu[5], new[5], borrow);
+    (accu[6], borrow) = sub_with_borrow(accu[6], new[6], borrow);
+    (accu[7], borrow) = sub_with_borrow(accu[7], new[7], borrow);
+
+    (accu, borrow)
 }

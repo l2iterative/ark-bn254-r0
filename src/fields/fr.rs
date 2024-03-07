@@ -1,4 +1,4 @@
-use crate::fp::FpConfig;
+use crate::fp::{Fp, FpConfig};
 
 pub struct FrConfig;
 impl FpConfig for FrConfig {
@@ -46,3 +46,15 @@ impl FpConfig for FrConfig {
         0x11b08a06u32,
     ]);
 }
+
+pub type Fr = Fp<FrConfig>;
+
+#[macro_export]
+macro_rules! BN254_FR {
+    ($c0:expr) => {{
+        let (is_positive, limbs) = ark_ff_macros::to_sign_and_limbs!($c0);
+        Fr::from_sign_and_limbs(is_positive, &limbs)
+    }};
+}
+
+pub use BN254_FR;
