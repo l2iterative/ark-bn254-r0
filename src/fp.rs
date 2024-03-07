@@ -276,6 +276,17 @@ impl<'a, P: FpConfig> AddAssign<&'a Self> for Fp<P> {
         while carry == 1 {
             carry = add(&mut self.data, &P::OVERFLOW_ADJUSTMENT);
         }
+        let mut res = MaybeUninit::<[u32; 8]>::uninit();
+        unsafe {
+            sys_bigint(
+                res.as_mut_ptr(),
+                OP_MULTIPLY,
+                &self.data,
+                &ONE,
+                &P::MODULUS,
+            );
+        }
+        self.data = unsafe { res.assume_init() }
     }
 }
 
@@ -908,11 +919,8 @@ impl<P: FpConfig> Field for Fp<P> {
         let output_byte_size = buffer_byte_size(254 + F::BIT_SIZE);
 
         if output_byte_size == 32 {
-            let mut all_bytes = MaybeUninit::<[u8; 32]>::uninit();
-            unsafe {
-                (*all_bytes.as_mut_ptr()).copy_from_slice(bytes);
-            }
-            let mut all_bytes = unsafe { all_bytes.assume_init() };
+            let mut all_bytes = [0u8; 32];
+            all_bytes[0..bytes.len()].copy_from_slice(bytes);
 
             let flags = F::from_u8_remove_flags(&mut all_bytes[31]);
             if flags.is_none() {
@@ -923,11 +931,8 @@ impl<P: FpConfig> Field for Fp<P> {
                 .ok()
                 .and_then(|f| Some((f, flags.unwrap())))
         } else {
-            let mut all_bytes = MaybeUninit::<[u8; 33]>::uninit();
-            unsafe {
-                (*all_bytes.as_mut_ptr()).copy_from_slice(bytes);
-            }
-            let mut all_bytes = unsafe { all_bytes.assume_init() };
+            let mut all_bytes = [0u8; 33];
+            all_bytes[0..bytes.len()].copy_from_slice(bytes);
 
             let flags = F::from_u8_remove_flags(&mut all_bytes[32]);
             if flags.is_none() {
