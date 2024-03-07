@@ -1,7 +1,7 @@
 use crate::{Fq, Fr, BN254_FQ, BN254_FR};
 use ark_ec::scalar_mul::glv::GLVConfig;
 use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
-use ark_ec::{bn, CurveConfig};
+use ark_ec::{AffineRepr, bn, CurveConfig};
 use ark_ff::{BigInt, PrimeField};
 use num_traits::Zero;
 
@@ -43,6 +43,12 @@ impl SWCurveConfig for Config {
     ) -> bn::G1Projective<crate::Config> {
         let s = Self::ScalarField::from_sign_and_limbs(true, scalar);
         GLVConfig::glv_mul_projective(*p, s)
+    }
+
+    #[inline]
+    fn mul_affine(base: &Affine<Self>, scalar: &[u64]) -> Projective<Self> {
+        let s = Self::ScalarField::from_sign_and_limbs(true, scalar);
+        GLVConfig::glv_mul_projective(base.into_group(), s)
     }
 }
 
