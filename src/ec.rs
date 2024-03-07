@@ -1,7 +1,7 @@
 use ark_ec::scalar_mul::glv::GLVConfig;
 use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{AdditiveGroup, BigInteger, Field, PrimeField};
+use ark_ff::{AdditiveGroup, Field, PrimeField};
 use num_traits::Zero;
 
 pub trait GLVConfigWithFastAffine: SWCurveConfig + GLVConfig {
@@ -27,8 +27,8 @@ pub trait GLVConfigWithFastAffine: SWCurveConfig + GLVConfig {
         let iter_k1 = ark_ff::BitIteratorBE::new(k1.into_bigint());
         let iter_k2 = ark_ff::BitIteratorBE::new(k2.into_bigint());
 
-        println!("{}", k1.into_bigint().num_bits());
-        println!("{}", k2.into_bigint().num_bits());
+        let three_div_by_2 =
+            Self::BaseField::from(3u32) * Self::BaseField::from(2u32).inverse().unwrap();
 
         let mut res: Option<(Self::BaseField, Self::BaseField)> = None;
         let mut skip_zeros = true;
@@ -42,7 +42,7 @@ pub trait GLVConfigWithFastAffine: SWCurveConfig + GLVConfig {
                 let (x, y) = res.as_ref().unwrap();
 
                 let x_sqr: Self::BaseField = *x * x;
-                let s: Self::BaseField = (x_sqr.double() + x_sqr) * y.double().inverse().unwrap();
+                let s: Self::BaseField = x_sqr * &three_div_by_2 * y.inverse().unwrap();
                 let x2 = s.square() - x.double();
                 let y2 = s * (*x - x2) - y;
 
