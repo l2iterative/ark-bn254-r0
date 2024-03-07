@@ -1,3 +1,4 @@
+use crate::{sys_bigint, sys_untrusted_mod_inv, sys_untrusted_mod_sqrt};
 use ark_ff::{
     AdditiveGroup, BigInt, BigInteger, FftField, Field, LegendreSymbol, PrimeField,
     SqrtPrecomputation,
@@ -25,33 +26,6 @@ const OP_MULTIPLY: u32 = 0;
 const ONE: [u32; 8] = [1u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32];
 
 const TWO: [u32; 8] = [2u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32];
-
-extern "C" {
-    fn sys_bigint(
-        result: *mut [u32; BIGINT_WIDTH_WORDS],
-        op: u32,
-        x: *const [u32; BIGINT_WIDTH_WORDS],
-        y: *const [u32; BIGINT_WIDTH_WORDS],
-        modulus: *const [u32; BIGINT_WIDTH_WORDS],
-    );
-}
-
-extern "C" {
-    fn sys_untrusted_mod_inv(
-        result: *mut u32,
-        x: *const [u32; BIGINT_WIDTH_WORDS],
-        modulus: *const [u32; BIGINT_WIDTH_WORDS],
-    );
-}
-
-extern "C" {
-    fn sys_untrusted_mod_sqrt(
-        result: *mut u32,
-        x: *const [u32; BIGINT_WIDTH_WORDS],
-        modulus: *const [u32; BIGINT_WIDTH_WORDS],
-        quadratic_nonresidue: *const [u32; BIGINT_WIDTH_WORDS],
-    ) -> u32;
-}
 
 pub trait FpConfig: Send + Sync + 'static + Sized {
     const MODULUS: [u32; 8];
@@ -278,13 +252,7 @@ impl<'a, P: FpConfig> AddAssign<&'a Self> for Fp<P> {
         }
         let mut res = MaybeUninit::<[u32; 8]>::uninit();
         unsafe {
-            sys_bigint(
-                res.as_mut_ptr(),
-                OP_MULTIPLY,
-                &self.data,
-                &ONE,
-                &P::MODULUS,
-            );
+            sys_bigint(res.as_mut_ptr(), OP_MULTIPLY, &self.data, &ONE, &P::MODULUS);
         }
         self.data = unsafe { res.assume_init() }
     }
