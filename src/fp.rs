@@ -377,29 +377,23 @@ impl<P: FpConfig> MulAssign<Self> for Fp<P> {
 
 impl<'a, P: FpConfig> MulAssign<&'a Self> for Fp<P> {
     fn mul_assign(&mut self, rhs: &'a Self) {
+        let mut res = MaybeUninit::<[u32; 8]>::uninit();
         unsafe {
             sys_bigint(
-                &mut self.data,
+                res.as_mut_ptr(),
                 OP_MULTIPLY,
                 &self.data,
                 &rhs.data,
                 &P::MODULUS,
             );
         }
+        self.data = unsafe { res.assume_init() }
     }
 }
 
 impl<'a, P: FpConfig> MulAssign<&'a mut Self> for Fp<P> {
     fn mul_assign(&mut self, rhs: &'a mut Self) {
-        unsafe {
-            sys_bigint(
-                &mut self.data,
-                OP_MULTIPLY,
-                &self.data,
-                &rhs.data,
-                &P::MODULUS,
-            );
-        }
+        self.mul_assign(&*rhs)
     }
 }
 
@@ -720,7 +714,7 @@ impl<P: FpConfig> ark_std::rand::distributions::Distribution<Fp<P>>
 {
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Fp<P> {
-        let mut slice: [u32; 8] = [
+        let slice: [u32; 8] = [
             rng.sample(ark_std::rand::distributions::Standard),
             rng.sample(ark_std::rand::distributions::Standard),
             rng.sample(ark_std::rand::distributions::Standard),
@@ -731,12 +725,14 @@ impl<P: FpConfig> ark_std::rand::distributions::Distribution<Fp<P>>
             rng.sample::<u32, _>(ark_std::rand::distributions::Standard) & 0x3fffffff,
         ];
 
+        let mut res = MaybeUninit::<[u32; 8]>::uninit();
+
         unsafe {
-            sys_bigint(&mut slice, OP_MULTIPLY, &slice, &ONE, &P::MODULUS);
+            sys_bigint(res.as_mut_ptr(), OP_MULTIPLY, &slice, &ONE, &P::MODULUS);
         }
 
         Fp {
-            data: slice,
+            data: unsafe { res.assume_init() },
             phantom: PhantomData,
         }
     }
@@ -773,22 +769,26 @@ impl<P: FpConfig> AdditiveGroup for Fp<P> {
     };
 
     fn double_in_place(&mut self) -> &mut Self {
+        let mut res = MaybeUninit::<[u32; 8]>::uninit();
         unsafe {
-            sys_bigint(&mut self.data, OP_MULTIPLY, &self.data, &TWO, &P::MODULUS);
+            sys_bigint(res.as_mut_ptr(), OP_MULTIPLY, &self.data, &TWO, &P::MODULUS);
         }
+        self.data = unsafe { res.assume_init() };
         self
     }
 
     fn neg_in_place(&mut self) -> &mut Self {
+        let mut res = MaybeUninit::<[u32; 8]>::uninit();
         unsafe {
             sys_bigint(
-                &mut self.data,
+                res.as_mut_ptr(),
                 OP_MULTIPLY,
                 &self.data,
                 &P::MODULUS_MINUS_ONE,
                 &P::MODULUS,
             );
         }
+        self.data = unsafe { res.assume_init() };
         self
     }
 }
@@ -1215,11 +1215,12 @@ impl<P: FpConfig> PrimeField for Fp<P> {
     }
 
     fn into_bigint(self) -> Self::BigInt {
+        let reduced = self.reduce();
         BigInt::<4>::new([
-            (self.data[0] as u64) | ((self.data[1] as u64) << 32),
-            (self.data[2] as u64) | ((self.data[3] as u64) << 32),
-            (self.data[4] as u64) | ((self.data[5] as u64) << 32),
-            (self.data[6] as u64) | ((self.data[7] as u64) << 32),
+            (reduced[0] as u64) | ((reduced[1] as u64) << 32),
+            (reduced[2] as u64) | ((reduced[3] as u64) << 32),
+            (reduced[4] as u64) | ((reduced[5] as u64) << 32),
+            (reduced[6] as u64) | ((reduced[7] as u64) << 32),
         ])
     }
 }
