@@ -112,7 +112,7 @@ impl GLVConfig for Config {
             div
         };
         let beta_2 = {
-            let (mut div, rem) = (&scalar * &n12.neg()).div_rem(&r);
+            let (mut div, rem) = (&scalar * &n12.clone().neg()).div_rem(&r);
             if (&rem + &rem) > r {
                 div.add_assign(num_bigint::BigInt::one());
             }
