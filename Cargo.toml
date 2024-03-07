@@ -10,6 +10,9 @@ ark-ec = { git = "https://github.com/arkworks-rs/algebra", default-features = fa
 ark-std = { git = "https://github.com/arkworks-rs/std", default-features = false }
 ark-serialize = { git = "https://github.com/arkworks-rs/algebra", default-features = false }
 zeroize = { version = "1", default-features = false, features = ["zeroize_derive"] }
+num-bigint = { version = "0.4", default-features = false }
+num-traits = "0.2.18"
+derivative = "2.2.0"
 
 [features]
 default = [ "curve" ]
