@@ -3,6 +3,7 @@ use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{AdditiveGroup, Field, PrimeField};
 use num_traits::Zero;
+use ark_std::ops::Neg;
 
 pub trait GLVConfigWithFastAffine: SWCurveConfig + GLVConfig {
     fn glv_mul_fast_affine(p: &Affine<Self>, k: Self::ScalarField) -> Projective<Self> {
@@ -73,7 +74,7 @@ pub trait GLVConfigWithFastAffine: SWCurveConfig + GLVConfig {
             } else {
                 let x = &point_to_add.0;
                 let y = &point_to_add.1;
-                res = Some((-x, -y));
+                res = Some((x.clone().neg(), y.clone().neg()));
             }
         }
 
