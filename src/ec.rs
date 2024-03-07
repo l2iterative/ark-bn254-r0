@@ -1,7 +1,7 @@
 use ark_ec::scalar_mul::glv::GLVConfig;
 use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{AdditiveGroup, Field, PrimeField};
+use ark_ff::{AdditiveGroup, BigInteger, Field, PrimeField};
 use num_traits::Zero;
 
 pub trait GLVConfigWithFastAffine: SWCurveConfig + GLVConfig {
@@ -26,6 +26,9 @@ pub trait GLVConfigWithFastAffine: SWCurveConfig + GLVConfig {
 
         let iter_k1 = ark_ff::BitIteratorBE::new(k1.into_bigint());
         let iter_k2 = ark_ff::BitIteratorBE::new(k2.into_bigint());
+
+        println!("{}", k1.into_bigint().num_bits());
+        println!("{}", k2.into_bigint().num_bits());
 
         let mut res: Option<(Self::BaseField, Self::BaseField)> = None;
         let mut skip_zeros = true;
