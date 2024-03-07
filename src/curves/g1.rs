@@ -4,7 +4,10 @@ use ark_ec::scalar_mul::glv::GLVConfig;
 use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use ark_ec::{bn, CurveConfig, CurveGroup};
 use ark_ff::{BigInt, PrimeField};
-use num_traits::Zero;
+use num_bigint::{BigUint, Sign};
+use num_integer::Integer;
+use num_traits::{One, Signed, Zero};
+use std::ops::AddAssign;
 
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct Config;
@@ -79,6 +82,68 @@ impl GLVConfig for Config {
         let mut res = (*p).clone();
         res.x *= Self::ENDO_COEFFS[0];
         res
+    }
+
+    fn scalar_decomposition(
+        k: Self::ScalarField,
+    ) -> ((bool, Self::ScalarField), (bool, Self::ScalarField)) {
+        let scalar: num_bigint::BigInt = k.into_bigint().into();
+
+        let coeff_bigints: [num_bigint::BigInt; 4] = Self::SCALAR_DECOMP_COEFFS.map(|x| {
+            num_bigint::BigInt::from_biguint(
+                x.0.then_some(Sign::Plus).unwrap_or(Sign::Minus),
+                x.1.into(),
+            )
+        });
+
+        let [n11, n12, n21, n22] = coeff_bigints;
+
+        let r = num_bigint::BigInt::from(Self::ScalarField::MODULUS);
+
+        // beta = vector([k,0]) * self.curve.N_inv
+        // The inverse of N is 1/r * Matrix([[n22, -n12], [-n21, n11]]).
+        // so β = (k*n22, -k*n12)/r
+
+        let beta_1 = {
+            let (mut div, rem) = (&scalar * &n22).div_rem(&r);
+            if (&rem + &rem) > r {
+                div.add_assign(num_bigint::BigInt::one());
+            }
+            div
+        };
+        let beta_2 = {
+            let (mut div, rem) = (&scalar * &n12).div_rem(&r);
+            if (&rem + &rem) > r {
+                div.add_assign(num_bigint::BigInt::one());
+            }
+            div
+        };
+
+        // b = vector([int(beta[0]), int(beta[1])]) * self.curve.N
+        // b = (β1N11 + β2N21, β1N12 + β2N22) with the signs!
+        //   = (b11   + b12  , b21   + b22)   with the signs!
+
+        // b1
+        let b11 = &beta_1 * &n11;
+        let b12 = &beta_2 * &n21;
+        let b1 = b11 + b12;
+
+        // b2
+        let b21 = &beta_1 * &n12;
+        let b22 = &beta_2 * &n22;
+        let b2 = b21 + b22;
+
+        let k1 = &scalar - b1;
+        let k1_abs = BigUint::try_from(k1.abs()).unwrap();
+
+        // k2
+        let k2 = -b2;
+        let k2_abs = BigUint::try_from(k2.abs()).unwrap();
+
+        (
+            (k1.sign() == Sign::Plus, Self::ScalarField::from(k1_abs)),
+            (k2.sign() == Sign::Plus, Self::ScalarField::from(k2_abs)),
+        )
     }
 }
 
