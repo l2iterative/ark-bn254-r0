@@ -36,12 +36,12 @@ pub trait GLVConfigWithFastAffine: SWCurveConfig + GLVConfig {
             }
 
             if res.is_some() {
-                let (x, y) = res.unwrap();
+                let (x, y) = res.as_ref().unwrap();
 
-                let x_sqr: Self::BaseField = x * &x;
+                let x_sqr: Self::BaseField = *x * x;
                 let s: Self::BaseField = (x_sqr.double() + x_sqr) * y.double().inverse().unwrap();
                 let x2 = s.square() - x.double();
-                let y2 = s * (x - &x2) - y;
+                let y2 = s * (*x - x2) - y;
 
                 res = Some((x2, y2));
             }
@@ -59,10 +59,10 @@ pub trait GLVConfigWithFastAffine: SWCurveConfig + GLVConfig {
 
             if res.is_some() {
                 let (x1, y1) = res.unwrap();
-                let x2 = point_to_add.0;
-                let y2 = point_to_add.1;
+                let x2 = &point_to_add.0;
+                let y2 = &point_to_add.1;
 
-                let s: Self::BaseField = (y1 - &y2) * (x1 - &x2).inverse().unwrap();
+                let s: Self::BaseField = (y1 - y2) * (x1 - x2).inverse().unwrap();
                 let x3 = s.square() - x1 - x2;
                 let y3 = s * (x1 - x3) - y1;
 
